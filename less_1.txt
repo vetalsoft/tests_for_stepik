@@ -1,0 +1,28 @@
+Test #1 input
+02:10 25 02:10
+Test #1 output
+equal: 1
+after: 02:35
+forward: 04:20
+backward: 00:00
+Test #2 input
+02:00 55 02:55
+Test #2 output
+equal: 0
+after: 02:55
+forward: 04:55
+backward: 11:05
+Test #3 input
+11:50 43 0:17
+Test #3 output
+equal: 0
+after: 00:33
+forward: 00:07
+backward: 11:33
+Test #4 input
+9:22 240 6:00
+Test #4 output
+equal: 0
+after: 01:22
+forward: 03:22
+backward: 03:22
