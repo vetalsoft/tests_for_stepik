@@ -57,6 +57,14 @@ fn main() -> Result<()> {
         eprintln!("{}", String::from_utf8_lossy(&compile_output.stderr));
         return Ok(()); // Завершаем работу, так как запускать нечего
     }
+
+    // Если компиляция успешна, но есть предупреждения в stderr
+    let stderr_output = String::from_utf8_lossy(&compile_output.stderr);
+    if !stderr_output.trim().is_empty() {
+        eprintln!("Предупреждения компилятора (код собран, но есть замечания):");
+        eprintln!("{}", stderr_output);
+    }
+
     println!("Компиляция успешна.\n");
 
     // 4. Парсинг тестовых данных
