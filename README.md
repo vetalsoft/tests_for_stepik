@@ -19,8 +19,8 @@
 Клонируйте репозиторий:
 
 ```bash
-git clone https://github.com/your-username/c-test-runner.git
-cd c-test-runner
+git clone https://github.com/your-username/tests_for_stepik.git
+cd tests_for_stepik
 ```
 
 Проверьте работу программы на вашей системе. В комплекте идут два си файла с файлами тестов. При проверке `less_2.c` выдаст сбой `Тест #4: Провален`
