@@ -128,7 +128,7 @@ dependencies = [
 
 [[package]]
 name = "tests_for_stepik"
-version = "0.1.1"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "tempfile",
