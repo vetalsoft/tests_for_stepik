@@ -44,7 +44,8 @@ void printTic(TicTac a) {
     printf("%02d:%02d\n", a.h, a.min);
 }
 
-int main(){
+int main() {
+    int unused;
     TicTac a,b,c;
     int mk;
     scanf("%d:%d", &(a.h), &(a.min));

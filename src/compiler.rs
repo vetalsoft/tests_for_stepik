@@ -21,13 +21,17 @@ pub fn compile(c_file_path: &str) -> Result<Option<TempPath>> {
     // 2. Компиляция C-кода
     println!("Компиляция {}...", c_file_path);
     let compile_output = Command::new("gcc") // Можно заменить на "clang" или "cc"
+        .arg("-g")
+        .arg("-O0")
+        .arg("-Wall")
+        .arg("-Wextra")
+        .arg("-Wunused")
+        .arg("-std=c11")
+        .arg("-lm")
         .arg(c_file_path)
         .arg("-o")
         .arg(&exe_path)
-        .arg("-Wall")
-        .arg("-Wextra")
-        .arg("-std=c11")
-        .arg("-lm")
+
         .output()
         .context("Не удалось запустить компилятор gcc. Установлен ли он в системе?")?;
 
