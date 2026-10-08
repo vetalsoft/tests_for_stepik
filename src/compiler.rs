@@ -8,7 +8,8 @@ use tempfile::TempPath;
 /// - `Ok(Some(path))` — компиляция успешна, путь к бинарнику
 /// - `Ok(None)`       — компиляция завершилась с ошибкой (сообщение уже выведено в stderr)
 /// - `Err(e)`         — системная ошибка (нет gcc, не удалось создать временный файл и т.д.)
-pub fn compile(c_file_path: &str) -> Result<Option<TempPath>> {
+/// - `bool``          — true если есть предупреждения компилятора
+pub fn compile(c_file_path: &str) -> Result<Option<(TempPath, bool)>> {
     // 1. Создание временного файла для исполняемого бинарника
     let exe_suffix = if cfg!(windows) { ".exe" } else { "" };
     let temp_exe = tempfile::Builder::new()
@@ -27,11 +28,10 @@ pub fn compile(c_file_path: &str) -> Result<Option<TempPath>> {
         .arg("-Wextra")
         .arg("-Wunused")
         .arg("-std=c11")
-        .arg("-lm")
         .arg(c_file_path)
         .arg("-o")
         .arg(&exe_path)
-
+        .arg("-lm")
         .output()
         .context("Не удалось запустить компилятор gcc. Установлен ли он в системе?")?;
 
@@ -42,13 +42,15 @@ pub fn compile(c_file_path: &str) -> Result<Option<TempPath>> {
     }
 
     // Если компиляция успешна, но есть предупреждения в stderr
+    let mut is_warning = false;
     let stderr_output = String::from_utf8_lossy(&compile_output.stderr);
     if !stderr_output.trim().is_empty() {
         eprintln!("Предупреждения компилятора (код собран, но есть замечания):");
         eprintln!("{}", stderr_output);
+        is_warning = true
     }
 
     println!("Компиляция успешна.\n");
 
-    Ok(Some(exe_path))
+    Ok(Some((exe_path, is_warning)))
 }

@@ -31,7 +31,7 @@ fn run() -> Result<ExitCode> {
     };
 
     // 2. Компиляция C-кода
-    let exe_path = match compiler::compile(c_file_path)? {
+    let (exe_path, is_warning) = match compiler::compile(c_file_path)? {
         Some(path) => path,
         None => return Ok(ExitCode::SUCCESS), // Ошибка компиляции уже выведена в stderr
     };
@@ -53,6 +53,9 @@ fn run() -> Result<ExitCode> {
             println!("\n Итог: пройдено {} из {} тестов.", passed_count, total_count);
             if passed_count == total_count {
                 println!("Все тесты успешно пройдены!");
+            }
+            if is_warning {
+                println!("Есть предупреждения компилятора!!!")
             }
         }
         Err(run_tests::RunTestsError::Timeout(test_id)) => {
