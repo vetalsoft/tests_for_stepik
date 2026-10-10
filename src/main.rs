@@ -71,11 +71,23 @@ fn run() -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
+fn print_error(err: &anyhow::Error) {
+    let mut chain = err.chain();
+
+    if let Some(first) = chain.next() {
+        eprintln!("Ошибка: {}", first);
+    }
+
+    for cause in chain {
+        eprintln!("   └─ Причина: {}", cause);
+    }
+}
+
 fn main() -> ExitCode {
     match run() {
         Ok(code) => code,
         Err(e) => {
-            eprintln!("Ошибка: {:?}", e);
+            print_error(&e);
             ExitCode::FAILURE
         }
     }
