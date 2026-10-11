@@ -76,14 +76,18 @@ pub fn run_tests(
                 let stdout_bytes = stdout_thread
                     .join()
                     .map_err(|_| {
-                        RunTestsError::Other(anyhow::anyhow!("Поток чтения stdout завершился с ошибкой"))
+                        RunTestsError::Other(anyhow::anyhow!(
+                            "Поток чтения stdout завершился с ошибкой"
+                        ))
                     })?
                     .map_err(|e| RunTestsError::Other(anyhow::Error::new(e)))?;
 
                 let stderr_bytes = stderr_thread
                     .join()
                     .map_err(|_| {
-                        RunTestsError::Other(anyhow::anyhow!("Поток чтения stderr завершился с ошибкой"))
+                        RunTestsError::Other(anyhow::anyhow!(
+                            "Поток чтения stderr завершился с ошибкой"
+                        ))
                     })?
                     .map_err(|e| RunTestsError::Other(anyhow::Error::new(e)))?;
 
