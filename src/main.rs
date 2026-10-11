@@ -1,6 +1,6 @@
-mod parser;
 mod comparator;
 mod compiler;
+mod parser;
 mod run_tests;
 
 use anyhow::{Context, Result};
@@ -10,7 +10,7 @@ use std::process::ExitCode;
 fn run() -> Result<ExitCode> {
     // 1. Разбор аргументов командной строки
     let args: Vec<String> = std::env::args().collect();
-    
+
     // Если передан только путь к программе (или ничего), выводим справку и выходим
     if args.len() < 2 {
         println!("Использование: <путь_к_файлу.c> <путь_к_файлу_тестов.txt>");
@@ -18,7 +18,7 @@ fn run() -> Result<ExitCode> {
     }
 
     let c_file_path = &args[1];
-    
+
     // Если указан второй аргумент, берем его. Иначе формируем путь автоматически.
     let test_file_path = if args.len() >= 3 {
         args[2].clone()
@@ -37,8 +37,10 @@ fn run() -> Result<ExitCode> {
     };
 
     // 3. Парсинг тестовых данных
-    let tests = parse_test_file(&test_file_path)
-        .context(format!("Ошибка при чтении файла тестов: {}", test_file_path))?;
+    let tests = parse_test_file(&test_file_path).context(format!(
+        "Ошибка при чтении файла тестов: {}",
+        test_file_path
+    ))?;
 
     println!("Запуск {} тестов...\n", tests.len());
 
@@ -50,7 +52,10 @@ fn run() -> Result<ExitCode> {
     match run_tests::run_tests(&exe_path, &tests, watchdog) {
         Ok((passed_count, total_count)) => {
             // 5. Итоговый отчет
-            println!("\n Итог: пройдено {} из {} тестов.", passed_count, total_count);
+            println!(
+                "\n Итог: пройдено {} из {} тестов.",
+                passed_count, total_count
+            );
             if passed_count == total_count {
                 println!("Все тесты успешно пройдены!");
             }
@@ -60,7 +65,10 @@ fn run() -> Result<ExitCode> {
         }
         Err(run_tests::RunTestsError::Timeout(test_id)) => {
             // Выходим из программы с сообщением, остальные тесты не выполняются
-            return Err(anyhow::anyhow!("Тест #{}: Превышен лимит времени выполнения", test_id));
+            return Err(anyhow::anyhow!(
+                "Тест #{}: Превышен лимит времени выполнения",
+                test_id
+            ));
         }
         Err(e) => {
             // Системные ошибки возвращаем в main для обработки через anyhow
