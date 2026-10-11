@@ -71,17 +71,18 @@ fn parse_test_content(content: &str) -> Result<Vec<TestCase>, ParserError> {
         })
         .collect();
 
-    let mut input = skip_before_test(Input {
-            lines: &lines_vec,
-            eof_line: lines_vec.len() + 1,
-        })?
-        .remaining_input;
+    let mut input = Input {
+        lines: &lines_vec,
+        eof_line: lines_vec.len() + 1,
+    };
+
+    input = input.skip_before_test()?.remaining_input;
 
     let res_tests: Result<Vec<TestCase>, ParserError> = std::iter::from_fn(move || {
         if input.lines.is_empty() {
-            None // Стоп итерации
+            None // Стоп
         } else {
-            Some(parse_test_at_input(input).map(|step| {
+            Some(input.parse_test_at_input().map(|step| {
                 input = step.remaining_input;
                 step.value
             }))
@@ -97,51 +98,50 @@ fn parse_test_content(content: &str) -> Result<Vec<TestCase>, ParserError> {
     Ok(tests)
 }
 
-fn parse_test_at_input(input: Input<'_>) -> ParseResult<'_, TestCase> {
-    input
-        .parse_input_header()?
-        .parse_input_body()?
-        .parse_output_header()?
-        .parse_output_body()
-}
-
-fn next_line(input: Input<'_>) -> Option<Parsed<'_, Line<'_>>> {
-    input.lines.split_first().map(|(line, rest)| Parsed {
-        value: *line,
-        remaining_input: Input {
-            lines: rest,
-            ..input
-        },
-    })
-}
-
-fn skip_before_test(mut input: Input<'_>) -> ParseResult<'_, ()> {
-    while let Some(success) = next_line(input) {
-        if is_input_header(success.value.text) {
-            return Ok(Parsed {
-                value: (),
-                remaining_input: input,
-            });
-        }
-        if is_output_header(success.value.text) {
-            return Err(ParserError::InvalidFormat {
-                line_number: success.value.number,
-                line: success.value.text.to_owned(),
-            });
-        }
-        input = success.remaining_input;
+impl<'a> Input<'a> {
+    fn parse_test_at_input(self) -> ParseResult<'a, TestCase> {
+        self.parse_input_header()?
+            .parse_input_body()?
+            .parse_output_header()?
+            .parse_output_body()
     }
 
-    Ok(Parsed {
-        value: (),
-        remaining_input: input,
-    })
-}
+    fn next_line(self) -> Option<Parsed<'a, Line<'a>>> {
+        self.lines.split_first().map(|(line, rest)| Parsed {
+            value: *line,
+            remaining_input: Input {
+                lines: rest,
+                ..self
+            },
+        })
+    }
 
-impl<'a> Input<'a> {
+    fn skip_before_test(mut self) -> ParseResult<'a, ()> {
+        while let Some(success) = self.next_line() {
+            if is_input_header(success.value.text) {
+                return Ok(Parsed {
+                    value: (),
+                    remaining_input: self,
+                });
+            }
+            if is_output_header(success.value.text) {
+                return Err(ParserError::InvalidFormat {
+                    line_number: success.value.number,
+                    line: success.value.text.to_owned(),
+                });
+            }
+            self = success.remaining_input;
+        }
+
+        Ok(Parsed {
+            value: (),
+            remaining_input: self,
+        })
+    }
+
     /// Парсим заголовок input, получаем ID
     fn parse_input_header(self) -> ParseResult<'a, usize> {
-        let success = next_line(self).ok_or_else(|| ParserError::InvalidFormat {
+        let success = self.next_line().ok_or_else(|| ParserError::InvalidFormat {
             line_number: self.eof_line,
             line: "<EOF>".to_owned(),
         })?;
@@ -167,7 +167,7 @@ impl<'a> Parsed<'a, usize> {
         let test_id = self.value;
         let mut input = self.remaining_input;
         let mut buffer = String::new();
-        while let Some(success) = next_line(input) {
+        while let Some(success) = input.next_line() {
             if is_output_header(success.value.text) {
                 return Ok(Parsed {
                     value: InputParsed {
@@ -199,10 +199,13 @@ impl<'a> Parsed<'a, InputParsed> {
     fn parse_output_header(self) -> ParseResult<'a, InputParsed> {
         let state = self.value;
 
-        let success = next_line(self.remaining_input).ok_or(ParserError::MissingOutput {
-            test_id: state.test_id,
-            line_number: self.remaining_input.eof_line,
-        })?;
+        let success = self
+            .remaining_input
+            .next_line()
+            .ok_or(ParserError::MissingOutput {
+                test_id: state.test_id,
+                line_number: self.remaining_input.eof_line,
+            })?;
 
         if !is_output_header(success.value.text) {
             return Err(ParserError::InvalidFormat {
@@ -231,7 +234,7 @@ impl<'a> Parsed<'a, InputParsed> {
         let mut input = self.remaining_input;
         let mut buffer = String::new();
 
-        while let Some(success) = next_line(input) {
+        while let Some(success) = input.next_line() {
             if is_input_header(success.value.text) {
                 let test_case = TestCase {
                     id: state.test_id,
@@ -303,9 +306,9 @@ fn append_to_buffer(buffer: &mut String, line: &str) {
 mod tests {
     use super::*;
 
-//------------------------
-// УСПЕШНЫЕ ВАРИАНТЫ
-//------------------------
+    //------------------------
+    // УСПЕШНЫЕ ВАРИАНТЫ
+    //------------------------
 
     #[test]
     fn test_single_test_case() {
@@ -338,15 +341,15 @@ Test #3 output
 "#;
         let result = parse_test_content(content).unwrap();
         assert_eq!(result.len(), 3);
-        
+
         assert_eq!(result[0].id, 1);
         assert_eq!(result[0].input, "1 2 3");
         assert_eq!(result[0].expected_output, "6");
-        
+
         assert_eq!(result[1].id, 2);
         assert_eq!(result[1].input, "4 5");
         assert_eq!(result[1].expected_output, "9");
-        
+
         assert_eq!(result[2].id, 3);
         assert_eq!(result[2].input, "10");
         assert_eq!(result[2].expected_output, "10");
@@ -397,9 +400,9 @@ Test #1 output
         assert_eq!(result[0].expected_output, "");
     }
 
-//------------------------
-// ВАРИАНТЫ С ОШИБКАМИ
-//------------------------
+    //------------------------
+    // ВАРИАНТЫ С ОШИБКАМИ
+    //------------------------
 
     #[test]
     fn test_empty_file() {
