@@ -373,7 +373,7 @@ result2
 
     #[test]
     fn test_garbage_before_first_test() {
-        let content = r#"Какой-то мусор или коментарий
+        let content = r#"Какой-то мусор или комментарий
 Ещё строка мусора
 
 Test #1 input
