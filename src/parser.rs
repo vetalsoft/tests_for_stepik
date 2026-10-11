@@ -71,26 +71,25 @@ fn parse_test_content(content: &str) -> Result<Vec<TestCase>, ParserError> {
         })
         .collect();
 
-    let mut input = Input {
-        lines: &lines_vec,
-        eof_line: lines_vec.len() + 1,
-    };
+    let mut input = skip_before_test(Input {
+            lines: &lines_vec,
+            eof_line: lines_vec.len() + 1,
+        })?
+        .remaining_input;
 
-    let mut tests: Vec<TestCase> = Vec::new();
-
-    let input_skip = skip_before_test(input)?;
-    input = input_skip.remaining_input;
-
-    while !input.lines.is_empty() {
+    let res_tests: Result<Vec<TestCase>, ParserError> = std::iter::from_fn(move || {
         if input.lines.is_empty() {
-            break;
+            None // Стоп итерации
+        } else {
+            Some(parse_test_at_input(input).map(|step| {
+                input = step.remaining_input;
+                step.value
+            }))
         }
+    })
+    .collect();
 
-        let test_step = parse_test_at_input(input)?;
-        tests.push(test_step.value);
-        input = test_step.remaining_input;
-    }
-
+    let tests = res_tests?;
     if tests.is_empty() {
         return Err(ParserError::NoTestsFound);
     }
