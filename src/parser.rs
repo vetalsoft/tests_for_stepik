@@ -1,4 +1,4 @@
-//! Парсер файла тестов для C-программ.
+//! Парсер файла тестов.
 //!
 //! Формат файла тестов:
 //! ```text
@@ -12,6 +12,7 @@
 //!
 //! Перед первым тестом допускается произвольный «мусор» (комментарии, пустые строки) —
 //! он будет проигнорирован. Номера тестов должны идти последовательно, начиная с 1.
+//!
 //!
 //! # Пример использования
 //! ```no_run
@@ -30,7 +31,8 @@ use thiserror::Error;
 
 /// Один тестовый случай: входные данные и ожидаемый вывод.
 ///
-/// Формируется парсером после успешного разбора пары секций `input`
+/// Формируется парсером после успешного разбора пары секций
+/// `Test #N input` и `Test #N output` с совпадающим `N`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TestCase {
     /// Порядковый номер теста (начинается с 1).
@@ -98,6 +100,13 @@ struct Parsed<'a, T> {
     remaining_input: Input<'a>,
 }
 
+impl<'a, T> Parsed<'a, T> {
+    /// Потребляет структуру и возвращает только оставшийся ввод.
+    fn into_input(self) -> Input<'a> {
+        self.remaining_input
+    }
+}
+
 /// Алиас типа для читаемости: результат парсинга — это либо успех с `Parsed<T>`,
 /// либо ошибка `ParserError`.
 type ParseResult<'a, T> = Result<Parsed<'a, T>, ParserError>;
@@ -106,9 +115,9 @@ type ParseResult<'a, T> = Result<Parsed<'a, T>, ParserError>;
 ///
 /// Хранит уже разобранный `test_id` и накопленный текст входных данных,
 /// пока парсер ждёт заголовок `Test #N output`.
-pub struct InputParsed {
-    pub test_id: usize,
-    pub input_text: String,
+struct InputParsed {
+    test_id: usize,
+    input_text: String,
 }
 
 /// Читает файл тестов по пути и возвращает список разобранных тестовых случаев.
@@ -146,8 +155,8 @@ fn parse_test_content(content: &str) -> Result<Vec<TestCase>, ParserError> {
 
     input
         .skip_before_test()?
-        .remaining_input
-        .parse_many(|i| i.parse_test_at_input())
+        .into_input()
+        .parse_many(|i| i.parse_single_test())
         .and_then(|tests| {
             tests
                 .is_empty()
@@ -166,21 +175,18 @@ impl<'a> Input<'a> {
     where
         F: Fn(Input<'a>) -> ParseResult<'a, TestCase>,
     {
-        std::iter::from_fn(move || {
-            if self.lines.is_empty() {
-                None // Стоп
-            } else {
-                Some(parse_fn(self).map(|step| {
-                    self = step.remaining_input;
-                    step.value
-                }))
-            }
+        std::iter::from_fn(move || match self.lines.is_empty() {
+            true => None,
+            false => Some(parse_fn(self).map(|step| {
+                self = step.remaining_input;
+                step.value
+            })),
         })
-        .collect::<Result<Vec<TestCase>, ParserError>>()
+        .collect()
     }
 
     /// Разбирает один полный тест.
-    fn parse_test_at_input(self) -> ParseResult<'a, TestCase> {
+    fn parse_single_test(self) -> ParseResult<'a, TestCase> {
         self.parse_input_header()?
             .parse_input_body()?
             .parse_output_header()?
@@ -234,7 +240,7 @@ impl<'a> Input<'a> {
     fn parse_input_header(self) -> ParseResult<'a, usize> {
         let success = self.next_line().ok_or_else(|| ParserError::InvalidFormat {
             line_number: self.eof_line,
-            line: "<EOF>".to_owned(),
+            line: "<неожиданный конец файла>".to_owned(),
         })?;
 
         if !is_input_header(success.value.text) {
@@ -255,7 +261,7 @@ impl<'a> Input<'a> {
 impl<'a> Parsed<'a, usize> {
     /// Читает тело секции `Test #N input` до ближайшего заголовка `Test #N output`.
     ///
-    /// Все строки между заголовками накапливаются в буфер (через [`append_to_buffer`]).
+    /// Все строки между заголовками накапливаются в буфер (через [`push_line`]).
     /// Если встретится ещё один `Test #N input` без промежуточного `Test #N output`
     ///   — ошибка: [`ParserError::MissingOutput`].
     fn parse_input_body(self) -> ParseResult<'a, InputParsed> {
@@ -278,7 +284,7 @@ impl<'a> Parsed<'a, usize> {
                     line_number: success.value.number,
                 });
             }
-            append_to_buffer(&mut buffer, success.value.text);
+            push_line(&mut buffer, success.value.text);
             input = success.remaining_input;
         }
 
@@ -364,7 +370,7 @@ impl<'a> Parsed<'a, InputParsed> {
                 input = success.remaining_input;
                 continue;
             }
-            append_to_buffer(&mut buffer, success.value.text);
+            push_line(&mut buffer, success.value.text);
             input = success.remaining_input;
         }
 
@@ -384,7 +390,7 @@ impl<'a> Parsed<'a, InputParsed> {
 /// Допускаются ведущие/замыкающие пробелы. Формат: `Test #<число> input`.
 fn is_input_header(text: &str) -> bool {
     let text = text.trim();
-    text.starts_with("Test #") && text.ends_with(" input")
+    text.starts_with("Test #") && text.ends_with("input")
 }
 
 /// Проверяет, является ли строка заголовком секции `Test #N output`.
@@ -392,19 +398,23 @@ fn is_input_header(text: &str) -> bool {
 /// Допускаются ведущие/замыкающие пробелы. Формат: `Test #<число> output`.
 fn is_output_header(text: &str) -> bool {
     let text = text.trim();
-    text.starts_with("Test #") && text.ends_with(" output")
+    text.starts_with("Test #") && text.ends_with("output")
 }
 
 /// Извлекает числовой ID теста из строки-маркера.
 ///
-/// `suffix` — ожидаемое окончание строки (`" input"` или `" output"`).
+/// `suffix` — ожидаемое окончание строки (`"input"` или `"output"`).
 /// Возвращает [`ParserError::InvalidFormat`], если ID не является числом.
 fn extract_test_id(marker: &str, suffix: &str, line_number: usize) -> Result<usize, ParserError> {
-    let marker = marker.trim();
-    let id_str = &marker["Test #".len()..marker.len() - suffix.len()];
+    let marker_trimmed = marker.trim();
+    let id_str = marker_trimmed
+        .strip_prefix("Test #")
+        .and_then(|s| s.strip_suffix(suffix))
+        .map(|s| s.trim());
+
     id_str
-        .parse::<usize>()
-        .map_err(|_| ParserError::InvalidFormat {
+        .and_then(|s| s.parse::<usize>().ok())
+        .ok_or_else(|| ParserError::InvalidFormat {
             line_number,
             line: marker.to_owned(),
         })
@@ -413,7 +423,7 @@ fn extract_test_id(marker: &str, suffix: &str, line_number: usize) -> Result<usi
 /// Добавляет строку в буфер многострочного текста.
 ///
 /// Между строками вставляет `\n`. Первая строка добавляется без префикса.
-fn append_to_buffer(buffer: &mut String, line: &str) {
+fn push_line(buffer: &mut String, line: &str) {
     if !buffer.is_empty() {
         buffer.push('\n');
     }
@@ -427,6 +437,34 @@ mod tests {
     //------------------------
     // УСПЕШНЫЕ ВАРИАНТЫ
     //------------------------
+
+    #[test]
+    fn test_non_sequential_test_ids_are_accepted() {
+        // Документирует фактическое поведение: парсер НЕ проверяет сквозную
+        // последовательность ID между тестами (`#1`, `#2`, `#3`, ...).
+        // Валидируется только совпадение ID между `input` и `output`
+        // внутри одного теста.
+        let content = r#"Test #1 input
+a
+Test #1 output
+b
+Test #3 input
+c
+Test #3 output
+d
+"#;
+        let result = parse_test_content(content).unwrap();
+
+        assert_eq!(result.len(), 2);
+
+        assert_eq!(result[0].id, 1);
+        assert_eq!(result[0].input, "a");
+        assert_eq!(result[0].expected_output, "b");
+
+        assert_eq!(result[1].id, 3);
+        assert_eq!(result[1].input, "c");
+        assert_eq!(result[1].expected_output, "d");
+    }
 
     #[test]
     fn test_single_test_case() {
@@ -590,5 +628,32 @@ result
 "#;
         let result = parse_test_content(content);
         assert!(matches!(result, Err(ParserError::InvalidFormat { .. })));
+    }
+
+    #[test]
+    fn test_eof_right_after_input_header() {
+        let content = r#"Test #1 input
+data"#;
+        let result = parse_test_content(content);
+        assert!(matches!(
+            result,
+            Err(ParserError::MissingOutput { test_id: 1, line_number: 3 })
+        ));
+    }
+
+    #[test]
+    fn test_duplicate_output_header_with_wrong_id() {
+        let content = r#"Test #1 input
+data
+Test #1 output
+result1
+Test #2 output
+result2
+"#;
+        let result = parse_test_content(content);
+        assert!(matches!(
+            result,
+            Err(ParserError::TestIdMismatch { expected: 1, found_id: 2, .. })
+        ));
     }
 }
