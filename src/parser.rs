@@ -1,4 +1,5 @@
 use std::fs;
+use std::ops::Not;
 use std::path::Path;
 use thiserror::Error;
 
@@ -62,6 +63,7 @@ pub fn parse_test_file<P: AsRef<Path>>(path: P) -> Result<Vec<TestCase>, ParserE
 
 /// Парсит строковое содержимое, возвращая вектор тестовых случаев.
 fn parse_test_content(content: &str) -> Result<Vec<TestCase>, ParserError> {
+    // `lines_vec` — владелец данных, на которые ссылается `input`.
     let lines_vec: Vec<Line> = content
         .lines()
         .enumerate()
@@ -71,34 +73,46 @@ fn parse_test_content(content: &str) -> Result<Vec<TestCase>, ParserError> {
         })
         .collect();
 
-    let mut input = Input {
+    let input = Input {
         lines: &lines_vec,
         eof_line: lines_vec.len() + 1,
     };
 
-    input = input.skip_before_test()?.remaining_input;
-
-    let res_tests: Result<Vec<TestCase>, ParserError> = std::iter::from_fn(move || {
-        if input.lines.is_empty() {
-            None // Стоп
-        } else {
-            Some(input.parse_test_at_input().map(|step| {
-                input = step.remaining_input;
-                step.value
-            }))
-        }
-    })
-    .collect();
-
-    let tests = res_tests?;
-    if tests.is_empty() {
-        return Err(ParserError::NoTestsFound);
-    }
-
-    Ok(tests)
+    input
+        .skip_before_test()?
+        .remaining_input
+        .parse_many(|i| i.parse_test_at_input())
+        .and_then(|tests| {
+            tests
+                .is_empty()
+                .not()
+                .then_some(tests)
+                .ok_or(ParserError::NoTestsFound)
+        })
 }
 
 impl<'a> Input<'a> {
+    /// Многократно запускает переданную функцию парсинга.
+    ///
+    /// # Ошибки
+    /// Возвращает [`ParserError`] на первой встреченной ошибке и прерывает выполнение.
+    fn parse_many<F>(mut self, parse_fn: F) -> Result<Vec<TestCase>, ParserError>
+    where
+        F: Fn(Input<'a>) -> ParseResult<'a, TestCase>,
+    {
+        std::iter::from_fn(move || {
+            if self.lines.is_empty() {
+                None // Стоп
+            } else {
+                Some(parse_fn(self).map(|step| {
+                    self = step.remaining_input;
+                    step.value
+                }))
+            }
+        })
+        .collect::<Result<Vec<TestCase>, ParserError>>()
+    }
+
     fn parse_test_at_input(self) -> ParseResult<'a, TestCase> {
         self.parse_input_header()?
             .parse_input_body()?
