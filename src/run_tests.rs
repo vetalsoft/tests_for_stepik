@@ -12,9 +12,11 @@ use crate::parser::TestCase;
 /// Ошибки, которые могут возникнуть при запуске тестов
 #[derive(Error, Debug)]
 pub enum RunTestsError {
-    /// Тест превысил лимит времени выполнения
     #[error("Тест #{0}: Превышен лимит времени выполнения")]
     Timeout(usize),
+
+    #[error("Тест #{id}: ненулевой код завершения ({code})")]
+    NonZeroExit { id: usize, code: i32 },
 
     /// Системные ошибки (запуск процесса, ввод-вывод и т.д.)
     #[error(transparent)]
@@ -30,9 +32,9 @@ pub enum RunTestsError {
 pub fn run_tests(
     exe_path: &Path,
     tests: &[TestCase],
-    watchdog_secs: u64,
+    watchdog_secs: Duration,
 ) -> Result<(usize, usize), RunTestsError> {
-    let timeout = Duration::from_secs(watchdog_secs);
+
     let mut passed_count = 0;
 
     for test in tests {
@@ -67,7 +69,7 @@ pub fn run_tests(
 
         // Ждем завершения процесса с таймаутом
         let status = child
-            .wait_timeout(timeout)
+            .wait_timeout(watchdog_secs)
             .map_err(|e| RunTestsError::Other(anyhow::Error::new(e)))?;
 
         match status {

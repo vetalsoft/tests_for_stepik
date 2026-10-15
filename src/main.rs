@@ -5,7 +5,7 @@ mod run_tests;
 
 use anyhow::{Context, Result};
 use parser::parse_test_file;
-use std::process::ExitCode;
+use std::{process::ExitCode, time::Duration};
 
 fn run() -> Result<ExitCode> {
     // 1. Разбор аргументов командной строки
@@ -46,7 +46,8 @@ fn run() -> Result<ExitCode> {
 
     // Переменная таймаута (в секундах)
     // TODO: Реализовать переопределение таймаута из CLI и/или конфигурации
-    let watchdog: u64 = 5;
+    // let watchdog: u64 = 5;
+    let watchdog = Duration::from_secs(5);
 
     // 4. Исполнение и проверка тестов
     match run_tests::run_tests(&exe_path, &tests, watchdog) {
